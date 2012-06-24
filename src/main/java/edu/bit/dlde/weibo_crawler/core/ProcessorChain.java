@@ -18,11 +18,11 @@ public class ProcessorChain extends LinkedList<Consumer<?>> {
 	public void process() throws Exception{
 		for (Consumer<?> c : this) {
 			logger.debug("{} begin to consume data from {}", c.getClass()
-					.toString().replaceAll(".*\\.", ""), c.getProvider()
+					.toString().replaceAll(".*\\.", ""), c.getProducer()
 					.getClass().toString().replaceAll(".*\\.", ""));
 			c.consume();
 			logger.debug("{} complete consuming data from {}", c.getClass()
-					.toString().replaceAll(".*\\.", ""), c.getProvider()
+					.toString().replaceAll(".*\\.", ""), c.getProducer()
 					.getClass().toString().replaceAll(".*\\.", ""));
 		}
 	}

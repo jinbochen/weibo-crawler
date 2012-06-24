@@ -9,10 +9,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import bit.mirror.dao.MirrorEngineDao;
-import bit.mirror.dao.mongo.MongoDao;
 import bit.mirror.data.Seed;
 
-import edu.bit.dlde.weibo_crawler.core.Provider;
+import edu.bit.dlde.weibo_crawler.core.Manager;
+import edu.bit.dlde.weibo_crawler.core.Producer;
 
 /**
  * 为SinaWeiboLogin提供seed
@@ -20,13 +20,17 @@ import edu.bit.dlde.weibo_crawler.core.Provider;
  * @author lins
  * @date 2012-6-19
  **/
-public class SeedProvider implements Provider<Seed> {
+public class SeedProvider implements Producer<Seed> {
 	private Logger logger = LoggerFactory.getLogger(SeedProvider.class);
-	private MirrorEngineDao dao = new MongoDao();
+	private MirrorEngineDao dao;// = new MongoDao();
+	private Manager manager;
 
-	public SeedProvider(MirrorEngineDao dao) {
-		this.dao = dao;
-		notifyMyself();
+	public Manager getManager() {
+		return manager;
+	}
+
+	public void setManager(Manager manager) {
+		this.manager = manager;
 	}
 
 	public MirrorEngineDao getDao() {
@@ -42,7 +46,7 @@ public class SeedProvider implements Provider<Seed> {
 	/**
 	 * 发派种子，每次从队列头部弹出一个种子。由于provider由consumer持有，所以种子的更新交由consumer处理
 	 * 
-	 * @see edu.bit.dlde.weibo_crawler.core.Provider#produce()
+	 * @see edu.bit.dlde.weibo_crawler.core.Producer#produce()
 	 */
 	public Seed produce() {
 		if (seeds == null || seeds.size() == 0)
@@ -58,7 +62,7 @@ public class SeedProvider implements Provider<Seed> {
 	/**
 	 * 发派一堆种子，但是不会清空队列
 	 * 
-	 * @see edu.bit.dlde.weibo_crawler.core.Provider#produceMega()
+	 * @see edu.bit.dlde.weibo_crawler.core.Producer#produceMega()
 	 */
 	public Collection<Seed> produceMega() {
 		return seeds;
@@ -67,9 +71,8 @@ public class SeedProvider implements Provider<Seed> {
 	/**
 	 * 从mongo数据库读入所有seed
 	 * 
-	 * @see edu.bit.dlde.weibo_crawler.core.Provider#notifyMyself()
 	 */
-	public synchronized void notifyMyself() {
+	public synchronized void loadSeeds() {
 		seeds = new SynchronousQueue<Seed>();
 		Iterator<Seed> it = dao.getSeeds().iterator();
 		while (it.hasNext()) {

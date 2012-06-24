@@ -6,8 +6,8 @@ package edu.bit.dlde.weibo_crawler.core;
  * @date 2012-6-19
  **/
 public interface Consumer<T> extends Runnable{
-	public void setProvider(Provider<T> p);
-	public Provider<T> getProvider();
-	public void consume(Provider<T> p) throws Exception;
+	public void setProducer(Producer<T> p);
+	public Producer<T> getProducer();
+	public void consume(Producer<T> p) throws Exception;
 	public void consume() throws Exception;
 }
