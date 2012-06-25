@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import net.sf.json.JSONObject;
@@ -17,22 +18,24 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import bit.mirror.data.Seed;
+
 import edu.bit.dlde.weibo_crawler.core.Manager;
 import edu.bit.dlde.weibo_crawler.core.Processor;
 import edu.bit.dlde.weibo_crawler.core.Producer;
 import edu.bit.dlde.weibo_crawler.utils.StreamFormator;
 
 /**
- * 抓取微博的类获得15条微博，将获得结果传送给下一个processor， 并且通过notifyMyself提醒自己找到重复的了
+ * 抓取微博的类,获得15条微博，将获得结果传送给下一个processor
  * 
  * @author lins
  * @date 2012-6-20
  **/
-public class WeiboFetcher implements Processor<JSONObject, String> {
+public class WeiboFetcher implements Processor<JSONObject, JSONObject> {
 	private static final Logger logger = LoggerFactory
 			.getLogger(WeiboFetcher.class);
 	private Manager manager;
-	volatile private Producer<String> producer;
+	volatile private Producer<JSONObject> producer;
 
 	public Manager getManager() {
 		return manager;
@@ -42,11 +45,11 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 		this.manager = manager;
 	}
 
-	public void setProducer(Producer<String> p) {
+	public void setProducer(Producer<JSONObject> p) {
 		this.producer = p;
 	}
 
-	public Producer<String> getProducer() {
+	public Producer<JSONObject> getProducer() {
 		return producer;
 	}
 
@@ -60,11 +63,12 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 		return jsonObjs;
 	}
 
-	public void consume(Producer<String> p) throws Exception {
+	public void consume(Producer<JSONObject> p) throws Exception {
 		this.producer = p;
 		consume();
 	}
 
+	/***由于这些线程是常驻的，所以把他们记录下来***/
 	private volatile ArrayList<Runnable> runnables = new ArrayList<Runnable>();
 	int threadCount = 10;
 
@@ -73,7 +77,7 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 			logger.debug("Provider of weibo login unavilable.");
 			return;
 		}
-		String cookie = null;
+		JSONObject cookie = null;
 
 		int sleep = 1;
 		for (cookie = producer.produce(); true; cookie = producer.produce()) {
@@ -95,7 +99,7 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 		}
 	}
 
-	/*
+	/**
 	 * 只有在跑起来之前设置才有效
 	 */
 	public void setThreadCount(int threadCount) {
@@ -125,11 +129,11 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 	 */
 	public class FetchThread implements Runnable {
 		private int id;
-		private String cookie;
+		private JSONObject jsonObj;
 
-		public FetchThread(int id, String cookie) {
+		public FetchThread(int id, JSONObject cookie) {
 			this.id = id;
-			this.cookie = cookie;
+			this.jsonObj = cookie;
 			page = id + 1;
 		}
 
@@ -137,8 +141,8 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 			return id;
 		}
 
-		public String getCookie() {
-			return cookie;
+		public JSONObject getCookie() {
+			return jsonObj;
 		}
 
 		private int page;
@@ -168,6 +172,13 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 			return sb.toString();
 		}
 
+		public void reset() {
+			page = id + 1;
+			count = 15;
+			pre_page = 1;
+			pagebar = -1;
+		}
+
 		/**
 		 * 一个线程保持一个HttpClient，不停地发送请求，获得微薄
 		 * 
@@ -176,9 +187,9 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 		public void run() {
 			HttpClient httpClient = new DefaultHttpClient();
 			while (true) {
-
-				HttpGet get = new HttpGet(getNextAjaxUrl());
-				get.addHeader("Cookie", cookie);
+				String uri = getNextAjaxUrl();
+				HttpGet get = new HttpGet(uri);
+				get.addHeader("Cookie", jsonObj.getString("cookie"));
 				HttpResponse hr;
 				try {
 					hr = httpClient.execute(get);
@@ -188,6 +199,11 @@ public class WeiboFetcher implements Processor<JSONObject, String> {
 					logger.debug(tmp);
 					JSONObject jsonObj = JSONObject.fromObject(tmp);
 					jsonObj.accumulate("thread-id", id);
+					// 伪造的一个uri
+					Seed seed = (Seed) jsonObj.get("seed");
+					jsonObj.accumulate("uri",
+							uri + "?date=" + new Date() + "?thread-id=" + id
+									+ "?account=" + seed.getAccount());
 					jsonObjs.add(jsonObj);
 					inputStream.close();
 				} catch (ClientProtocolException e) {

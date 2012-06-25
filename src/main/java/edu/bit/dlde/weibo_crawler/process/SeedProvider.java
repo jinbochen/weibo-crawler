@@ -2,7 +2,7 @@ package edu.bit.dlde.weibo_crawler.process;
 
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
@@ -20,7 +20,7 @@ import edu.bit.dlde.weibo_crawler.core.Producer;
  * @author lins
  * @date 2012-6-19
  **/
-public class SeedProvider implements Producer<Seed> {
+public class SeedProvider implements Producer<Seed>, Runnable {
 	private Logger logger = LoggerFactory.getLogger(SeedProvider.class);
 	private MirrorEngineDao dao;// = new MongoDao();
 	private Manager manager;
@@ -41,7 +41,7 @@ public class SeedProvider implements Producer<Seed> {
 		this.dao = dao;
 	}
 
-	SynchronousQueue<Seed> seeds;
+	LinkedBlockingQueue<Seed> seeds;
 
 	/**
 	 * 发派种子，每次从队列头部弹出一个种子。由于provider由consumer持有，所以种子的更新交由consumer处理
@@ -73,7 +73,7 @@ public class SeedProvider implements Producer<Seed> {
 	 * 
 	 */
 	public synchronized void loadSeeds() {
-		seeds = new SynchronousQueue<Seed>();
+		seeds = new LinkedBlockingQueue<Seed>();
 		Iterator<Seed> it = dao.getSeeds().iterator();
 		while (it.hasNext()) {
 			Seed s = it.next();
@@ -82,4 +82,7 @@ public class SeedProvider implements Producer<Seed> {
 		}
 	}
 
+	public void run() {
+		loadSeeds();
+	}
 }

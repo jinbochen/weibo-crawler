@@ -4,6 +4,8 @@ import java.util.Collection;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
+import net.sf.json.JSONObject;
+
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +24,7 @@ import edu.bit.dlde.weibo_crawler.core.Producer;
  * @author lins
  * @date 2012-6-19
  **/
-public class WeiboLogin implements Processor<String, Seed> {
+public class WeiboLogin implements Processor<JSONObject, Seed> {
 	private final static Logger logger = LoggerFactory
 			.getLogger(WeiboLogin.class);
 	private Manager manager;
@@ -73,8 +75,8 @@ public class WeiboLogin implements Processor<String, Seed> {
 			else {
 				// 长时间休眠则提醒provider,重新产生新的seed
 				// and出于cookie过期的考虑重置cookies
-				cookies = new LinkedBlockingQueue<String>();
-				manager.reloadCookie();
+				cookies.clear();
+				manager.fireCookieReload();
 				sleep = 1;
 				Thread.sleep(10000);
 			}
@@ -85,19 +87,22 @@ public class WeiboLogin implements Processor<String, Seed> {
 				new DefaultHttpClient());
 		sinaLogin.try2Login(seed.getAccount(), seed.getPassword());
 
-		if (!cookies.contains(sinaLogin.getCookie()))
-			cookies.add(sinaLogin.getCookie());
+		JSONObject cookie = new JSONObject();
+		cookie.accumulate("seed", seed);
+		cookie.accumulate("cookie", sinaLogin.getCookie());
+		if (!cookies.contains(cookie))
+			cookies.add(cookie);
 	}
 
-	private volatile static LinkedBlockingQueue<String> cookies = new LinkedBlockingQueue<String>();
+	private volatile static LinkedBlockingQueue<JSONObject> cookies = new LinkedBlockingQueue<JSONObject>();
 
 	/**
 	 * 用于产生爬虫的cookies，等待时间为1s，否则中断，返回null
 	 * 
 	 * @see edu.bit.dlde.weibo_crawler.core.Producer#produce()
 	 */
-	public String produce() {
-		String cookie;
+	public JSONObject produce() {
+		JSONObject cookie;
 		try {
 			cookie = cookies.poll(1, TimeUnit.SECONDS);
 		} catch (InterruptedException e) {
@@ -114,7 +119,7 @@ public class WeiboLogin implements Processor<String, Seed> {
 	 * @see edu.bit.dlde.weibo_crawler.core.Producer#produceMega()
 	 */
 	@Deprecated
-	public Collection<String> produceMega() {
+	public Collection<JSONObject> produceMega() {
 		return cookies;
 	}
 
