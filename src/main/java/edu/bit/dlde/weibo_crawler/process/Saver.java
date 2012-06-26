@@ -150,6 +150,7 @@ public class Saver implements Processor<Long, JSONObject> {
 				try {
 					webPage.setUrl(new URI(jsonObj.getString("uri-" + i)));
 					/*** 将WebPage存入数据库 ***/
+					logger.info("{} was sunk into DB.", jsonObj.getString("uri-" + i));
 					dao.saveWebPage(webPage);
 					count = count + 1;
 				} catch (URISyntaxException e) {

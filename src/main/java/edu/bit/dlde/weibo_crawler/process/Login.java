@@ -81,7 +81,7 @@ public class Login implements Processor<JSONObject, Seed> {
 				// 长时间休眠则提醒provider,重新产生新的seed
 				// and出于cookie过期的考虑重置cookies
 				cookies.clear();
-				manager.fireCookieReload();
+				manager.fireCookieReloadEvent();
 				sleep = 1;
 				Thread.sleep(10000);
 			}

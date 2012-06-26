@@ -149,7 +149,7 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 		long hash = 0;
 
 		private boolean DBcontains(String raw, String content) {
-			logger.debug("Caculating hash code of {}.", raw);
+			logger.debug("Caculating hash code of weibo.");
 			// 模拟hashcode，不同的是返回long型
 			// hash能保证的是相同的hash相同，但无法保证不同的不同
 			long seed = 31;
@@ -242,7 +242,7 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 					count++;
 					if (i == nodeList.getLength() - 1
 							&& count >= nodeList.getLength() / 2) {
-						manager.fireFetcherReset();
+						manager.fireFetcherResetEvent(jsonObj.getString("ajax-url"));
 						count = 0;
 						break;
 					}

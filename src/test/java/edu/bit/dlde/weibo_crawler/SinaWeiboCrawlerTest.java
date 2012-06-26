@@ -1,6 +1,6 @@
 package edu.bit.dlde.weibo_crawler;
 
-import edu.bit.dlde.weibo_crawler.facet.SinaWeiboCrawler;
+import edu.bit.dlde.weibo_crawler.facade.SinaWeiboCrawler;
 
 /**
  *

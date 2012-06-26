@@ -11,6 +11,7 @@ import com.mongodb.MongoException;
 
 import bit.mirror.dao.mongo.MongoDao;
 
+import edu.bit.dlde.weibo_crawler.process.Fetcher.FetchThread;
 import edu.bit.dlde.weibo_crawler.process.RedundancyFilter;
 import edu.bit.dlde.weibo_crawler.process.SeedProvider;
 import edu.bit.dlde.weibo_crawler.process.Fetcher;
@@ -131,16 +132,21 @@ public class Manager {
 		return goonWithoutExceptions;
 	}
 
-	public void fireCookieReload() {
+	public void fireCookieReloadEvent() {
 
 	}
 
-	public void fireFetcherReset() {
-
+	/**
+	 * 由于fetcher里面一个线程处理一个ajaxUrl，所以可以根据ajaxUrl来操作fetch的某一线程
+	 */
+	public void fireFetcherResetEvent(String ajaxUrl) {
+		FetchThread t = weiboFetcher.getFetchThread(ajaxUrl);
+		if (t != null)
+			t.resetAjaxUrl();
 	}
 
 	public void fireSeedReloadEvent() {
-		
+
 	}
 
 	public boolean isLoadWithoutExceptions() {

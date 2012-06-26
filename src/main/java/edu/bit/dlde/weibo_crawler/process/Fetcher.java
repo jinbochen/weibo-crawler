@@ -29,10 +29,13 @@ import edu.bit.dlde.weibo_crawler.utils.StreamFormator;
  * @date 2012-6-20
  **/
 public class Fetcher implements Processor<JSONObject, JSONObject> {
-	private static final Logger logger = LoggerFactory
-			.getLogger(Fetcher.class);
+	private static final Logger logger = LoggerFactory.getLogger(Fetcher.class);
 	volatile private Manager manager;
 	volatile private Producer<JSONObject> producer;
+
+	public Fetcher() {
+		ajaxUrls.add(homeAjaxUrl);
+	}
 
 	public Manager getManager() {
 		return manager;
@@ -66,7 +69,16 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 	}
 
 	/*** 由于这些线程是常驻的，所以把他们记录下来 ***/
-	private volatile ArrayList<Runnable> runnables = new ArrayList<Runnable>();
+	private volatile ArrayList<FetchThread> fetchThreads = new ArrayList<FetchThread>();
+	
+	public FetchThread getFetchThread(String ajaxUrl){
+		for(FetchThread fetchThread : fetchThreads){
+			if(fetchThread.ajaxUrl.equals(ajaxUrl))
+				return fetchThread;
+		}
+		return null;
+	}
+	
 	int threadCount = 5;
 
 	public void consume() throws Exception {
@@ -81,17 +93,22 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 			if (cookie == null || cookie.equals("")) {
 				logger.debug("Cookie for weibo login unavilable.");
 				Thread.sleep(sleep * 10000);
-				if (sleep < 6)
+				if (sleep < 10)
 					sleep++;
+				else {
+					// 每过9分钟左右重置一下ajaxUrls
+					ajaxUrls.clear();
+					ajaxUrls.add(homeAjaxUrl);
+				}
 				continue;
 			}
 			sleep = 1;
-			// 默认每个cookie开10条线进行爬虫
+			// 默认每个cookie开threadCount条线进行爬虫
 			for (int i = 0; i < threadCount; i++) {
 				// 真正在爬微博的线程
-				Runnable r = new FetchThread(i, cookie);
+				FetchThread r = new FetchThread(i, cookie);
 				Manager.exec.execute(r);
-				runnables.add(r);
+				fetchThreads.add(r);
 			}
 		}
 	}
@@ -111,24 +128,22 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 		}
 	}
 
-	private String ajaxUrl = "http://weibo.com/aj/mblog/fsearch";
+	private volatile LinkedBlockingQueue<String> ajaxUrls = new LinkedBlockingQueue<String>();
+	private final String homeAjaxUrl = "http://weibo.com/aj/mblog/fsearch";
 
-	public String getAjaxUrl() {
-		return ajaxUrl;
+	public void addAjaxUrls(String ajaxUrl){
+		ajaxUrls.add(ajaxUrl);
 	}
+	
+	public final int MAX_VOLUMN = 1024;
 
-	public void setAjaxUrl(String ajaxUrl) {
-		this.ajaxUrl = ajaxUrl;
-	}
-
-	public final int MAX_VOLUMN = 1024; 
-	int sleep = 1;
 	/**
 	 * 真正用来爬虫的线程
 	 */
 	public class FetchThread implements Runnable {
 		private int id;
 		private JSONObject cookie;
+		private String ajaxUrl;
 
 		public FetchThread(int id, JSONObject cookie) {
 			this.id = id;
@@ -150,20 +165,24 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 		private int pagebar = -1;
 
 		/**
-		 * 每个page的第一个都是纯粹的AjaxUrl，接着pagebar增从0-1，然后再增加page
+		 * 每个page的第一个都是纯粹的AjaxUrl，接着pagebar增从0-1，然后再增加page从1开始
 		 */
 		private String getNextAjaxUrl() {
 			StringBuilder sb = new StringBuilder(ajaxUrl);
 			if (pagebar != -1) {
-				sb.append("?");
+				if (ajaxUrl.contains("?"))// http://weibo.com/aj/mblog/mbloglist?uid=1875931727
+					sb.append("&");
+				else
+					// http://weibo.com/aj/mblog/fsearch
+					sb.append("?");
 				sb.append("page=" + page);
 				sb.append("&count=" + count);
 				sb.append("&pre_page=" + pre_page);
 				sb.append("&pagebar=" + pagebar);
 				pre_page = page;
-				// pagebar从0-1，page从id开始自增
+				// pagebar从0～1，page从id开始自增
 				if (pagebar == 1) {
-					page += threadCount;
+					page++;
 					pagebar = -2;
 				}
 			}
@@ -172,10 +191,24 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 		}
 
 		public void reset() {
-			page = id + 1;
+			page = 1;
 			count = 15;
 			pre_page = 1;
 			pagebar = -1;
+		}
+		
+		public void resetAjaxUrl(){
+			int tsleep = 0;
+			do {
+				try {
+					Thread.sleep(tsleep * 1000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+				if (tsleep <= 60)
+					tsleep++;
+				ajaxUrl = ajaxUrls.poll();
+			} while (ajaxUrl == null);
 		}
 
 		/**
@@ -184,19 +217,21 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 		 * @see java.lang.Runnable#run()
 		 */
 		public void run() {
-			if (jsonObjs.size() > MAX_VOLUMN) {
-				logger.error("Sth. may be wrong with RedundancyFilter as so many weibos in WeiboFetcher.");
-				try {
-					Thread.sleep(sleep * 1000);
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-				if (sleep <= 60)
-					sleep++;
-			}
-			sleep = 1;
+			resetAjaxUrl();
 			HttpClient httpClient = new DefaultHttpClient();
+			int tsleep = 1;
 			while (true) {
+				if (jsonObjs.size() > MAX_VOLUMN) {
+					logger.error("Sth. may be wrong with RedundancyFilter as so many weibos in WeiboFetcher.");
+					try {
+						Thread.sleep(tsleep * 1000);
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+					if (tsleep <= 60)
+						tsleep++;
+				}
+				tsleep = 1;
 				String uri = getNextAjaxUrl();
 				HttpGet get = new HttpGet(uri);
 				get.addHeader("Cookie", cookie.getString("cookie"));
@@ -209,12 +244,13 @@ public class Fetcher implements Processor<JSONObject, JSONObject> {
 					logger.debug(tmp);
 					JSONObject jsonObj = JSONObject.fromObject(tmp);
 					jsonObj.accumulate("thread-id", id);
+					jsonObj.accumulate("ajax-url", ajaxUrl);
 					// 伪造的一个uri
-//					jsonObj.accumulate(
-//							"uri",
-//							uri + "?date=" + new Date().getTime()
-//									+ "?thread-id=" + id + "?account="
-//									+ cookie.getString("seed:account"));
+					// jsonObj.accumulate(
+					// "uri",
+					// uri + "?date=" + new Date().getTime()
+					// + "?thread-id=" + id + "?account="
+					// + cookie.getString("seed:account"));
 					jsonObj.accumulateAll(cookie);
 					jsonObjs.add(jsonObj);
 					inputStream.close();

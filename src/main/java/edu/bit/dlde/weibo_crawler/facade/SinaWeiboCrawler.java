@@ -1,4 +1,4 @@
-package edu.bit.dlde.weibo_crawler.facet;
+package edu.bit.dlde.weibo_crawler.facade;
 
 import java.util.Date;
 
@@ -27,7 +27,7 @@ public class SinaWeiboCrawler implements WeiboCrawler {
 
 	/**
 	 * 启动爬虫
-	 * @see edu.bit.dlde.weibo_crawler.facet.WeiboCrawler#start()
+	 * @see edu.bit.dlde.weibo_crawler.facade.WeiboCrawler#start()
 	 */
 	public boolean start() {
 		logger.info("{} began at {}.",
@@ -51,7 +51,7 @@ public class SinaWeiboCrawler implements WeiboCrawler {
 	/**
 	 * 停止爬虫
 	 * 
-	 * @see edu.bit.dlde.weibo_crawler.facet.WeiboCrawler#stop()
+	 * @see edu.bit.dlde.weibo_crawler.facade.WeiboCrawler#stop()
 	 */
 	public boolean stop() {
 		logger.info("{} shut down at {}.", this.getClass().toString()
@@ -74,7 +74,7 @@ public class SinaWeiboCrawler implements WeiboCrawler {
 	/**
 	 * 暂停爬虫
 	 * 
-	 * @see edu.bit.dlde.weibo_crawler.facet.WeiboCrawler#pause(long)
+	 * @see edu.bit.dlde.weibo_crawler.facade.WeiboCrawler#pause(long)
 	 */
 	public boolean pause(long millis) {
 		logger.info("{} pasued at {}.",
@@ -97,7 +97,7 @@ public class SinaWeiboCrawler implements WeiboCrawler {
 
 	/**
 	 * 继续爬虫
-	 * @see edu.bit.dlde.weibo_crawler.facet.WeiboCrawler#goon()
+	 * @see edu.bit.dlde.weibo_crawler.facade.WeiboCrawler#goon()
 	 */
 	public boolean goon() {
 		logger.info("{} continues at {}.",

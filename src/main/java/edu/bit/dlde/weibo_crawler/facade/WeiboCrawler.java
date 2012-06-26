@@ -1,4 +1,4 @@
-package edu.bit.dlde.weibo_crawler.facet;
+package edu.bit.dlde.weibo_crawler.facade;
 
 /**
  *
