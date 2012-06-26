@@ -1,5 +1,6 @@
 package edu.bit.dlde.weibo_crawler.auth;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
 import java.util.ArrayList;
@@ -38,10 +39,10 @@ public class SinaWeiboLoginAuth implements LoginAuth {
 	private String account;
 	private String password;
 
-	public HttpClient getHttpClient(){
+	public HttpClient getHttpClient() {
 		return dhc;
 	}
-	
+
 	public String getAccount() {
 		return account;
 	}
@@ -62,8 +63,8 @@ public class SinaWeiboLoginAuth implements LoginAuth {
 		this.password = password;
 	}
 
-	public void try2Login(String account, String password)
-			throws LoginFailureException {
+	public boolean try2Login(String account, String password)
+			throws LoginFailureException, IOException {
 		this.account = account;
 		this.password = password;
 		this.su = this.encodeAccount(this.account);
@@ -72,7 +73,7 @@ public class SinaWeiboLoginAuth implements LoginAuth {
 		this.sp = new SinaSSOEncoder().encode(this.password, this.servertime,
 				this.nonce);
 		this.cookie = this.initCookieString();
-		connect();
+		return connect();
 	}
 
 	public SinaWeiboLoginAuth(DefaultHttpClient dhc) {
@@ -81,60 +82,61 @@ public class SinaWeiboLoginAuth implements LoginAuth {
 
 	private final String loginUrl = "http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.3.16)";
 
-	private void connect() throws LoginFailureException {
+	private boolean connect() throws LoginFailureException, IOException {
+		boolean flag = false;
+		
 		if (this.dhc == null) {
 			logger.error("DefaultHttpClient has not been initiallized!");
 			throw new LoginFailureException();
 		}
 
-		try {
-			System.out.println("login to retrieve cookies from server...");
-			HttpPost post = new HttpPost(loginUrl);
-			ArrayList<BasicNameValuePair> params = new ArrayList<BasicNameValuePair>();
-			params.add(new BasicNameValuePair("entry", "weibo"));
-			params.add(new BasicNameValuePair("gateway", "1"));
-			params.add(new BasicNameValuePair("from", ""));
-			params.add(new BasicNameValuePair("savestate", "7"));
-			params.add(new BasicNameValuePair("useticket", "1"));
-			params.add(new BasicNameValuePair("ssosimplelogin", "1"));
-			params.add(new BasicNameValuePair("vsnf", "1"));
-			params.add(new BasicNameValuePair("vsnval", ""));
-			params.add(new BasicNameValuePair("su", this.su));
-			params.add(new BasicNameValuePair("service", "miniblog"));
-			params.add(new BasicNameValuePair("servertime", this.servertime));
-			params.add(new BasicNameValuePair("nonce", this.nonce));
-			params.add(new BasicNameValuePair("pwencode", "wsse"));
-			params.add(new BasicNameValuePair("sp", this.sp));
-			params.add(new BasicNameValuePair("encoding", "UTF-8"));
-			// params.add(new BasicNameValuePair(
-			// "url",
-			// "http://weibo.com/ajaxlogin.php?framelogin=1&callback=parent.sinaSSOController.feedBackUrlCallBack"));
-			params.add(new BasicNameValuePair("returntype", "META"));
-			UrlEncodedFormEntity formEntiry = new UrlEncodedFormEntity(params);
-			post.setEntity(formEntiry);
-			HttpResponse hr = this.dhc.execute(post);
-			// 添加cookie参数
-			String cookiestr;
-			for (int i = 0; i < hr.getHeaders("Set-Cookie").length; i++) {
-				cookiestr = hr.getHeaders("Set-Cookie")[i].toString()
-						.replace("Set-Cookie:", "").trim();
-				this.cookie += cookiestr.substring(0, cookiestr.indexOf(";"))
-						+ ";";
-			}
-			this.cookie += "un=" + this.account;
-
-			HttpEntity hentity = hr.getEntity();
-			InputStream inputstream = hentity.getContent();
-			String tmp = StreamFormator.getString(inputstream, "gbk");
-			if (tmp.indexOf("正在登录") > 0) {
-				throw new LoginFailureException();
-			} else {
-				System.out.println("fail to login...");
-			}
-			inputstream.close();
-		} catch (Exception e) {
-			e.printStackTrace();
+		logger.info("Login to retrieve cookies from server...");
+		HttpPost post = new HttpPost(loginUrl);
+		ArrayList<BasicNameValuePair> params = new ArrayList<BasicNameValuePair>();
+		params.add(new BasicNameValuePair("entry", "weibo"));
+		params.add(new BasicNameValuePair("gateway", "1"));
+		params.add(new BasicNameValuePair("from", ""));
+		params.add(new BasicNameValuePair("savestate", "7"));
+		params.add(new BasicNameValuePair("useticket", "1"));
+		params.add(new BasicNameValuePair("ssosimplelogin", "1"));
+		params.add(new BasicNameValuePair("vsnf", "1"));
+		params.add(new BasicNameValuePair("vsnval", ""));
+		params.add(new BasicNameValuePair("su", this.su));
+		params.add(new BasicNameValuePair("service", "miniblog"));
+		params.add(new BasicNameValuePair("servertime", this.servertime));
+		params.add(new BasicNameValuePair("nonce", this.nonce));
+		params.add(new BasicNameValuePair("pwencode", "wsse"));
+		params.add(new BasicNameValuePair("sp", this.sp));
+		params.add(new BasicNameValuePair("encoding", "UTF-8"));
+		// params.add(new BasicNameValuePair(
+		// "url",
+		// "http://weibo.com/ajaxlogin.php?framelogin=1&callback=parent.sinaSSOController.feedBackUrlCallBack"));
+		params.add(new BasicNameValuePair("returntype", "META"));
+		UrlEncodedFormEntity formEntiry = new UrlEncodedFormEntity(params);
+		post.setEntity(formEntiry);
+		HttpResponse hr = this.dhc.execute(post);
+		// 添加cookie参数
+		String cookiestr;
+		for (int i = 0; i < hr.getHeaders("Set-Cookie").length; i++) {
+			cookiestr = hr.getHeaders("Set-Cookie")[i].toString()
+					.replace("Set-Cookie:", "").trim();
+			this.cookie += cookiestr.substring(0, cookiestr.indexOf(";")) + ";";
 		}
+		this.cookie += "un=" + this.account;
+
+		HttpEntity hentity = hr.getEntity();
+		InputStream inputstream = hentity.getContent();
+		String tmp = StreamFormator.getString(inputstream, "gbk");
+		if (tmp.indexOf("正在登录") > 0) {
+			flag = true;
+			logger.info("Success to login!");
+		} else {
+			flag = false;
+			throw new LoginFailureException();
+		}
+		inputstream.close();
+		
+		return flag;
 	}
 
 	private String initCookieString() {
@@ -163,7 +165,8 @@ public class SinaWeiboLoginAuth implements LoginAuth {
 		return String.valueOf(servertime);
 	}
 
-	public static void main(String[] args) throws LoginFailureException {
+	public static void main(String[] args) throws LoginFailureException,
+			IOException {
 		SinaWeiboLoginAuth sinaLogin = new SinaWeiboLoginAuth(
 				new DefaultHttpClient());
 		sinaLogin.try2Login("13811238365", "a62055974");

@@ -1,14 +1,12 @@
 package edu.bit.dlde.weibo_crawler.process;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.StringWriter;
 import java.util.Collection;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
 import javax.xml.transform.Result;
 import javax.xml.transform.Transformer;
 import javax.xml.transform.TransformerConfigurationException;
@@ -18,14 +16,16 @@ import javax.xml.transform.TransformerFactoryConfigurationError;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import org.htmlcleaner.DomSerializer;
+import org.htmlcleaner.HtmlCleaner;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
 import bit.mirror.dao.MirrorEngineDao;
+import bit.mirror.data.WebPage;
 
 import net.sf.json.JSONObject;
 import edu.bit.dlde.weibo_crawler.core.Manager;
@@ -43,20 +43,17 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 			.getLogger(RedundancyFilter.class);
 	private MirrorEngineDao dao;// = new MongoDao();
 	volatile private Producer<JSONObject> producer;
-	private Manager manager;
+	volatile private Manager manager;
 
 	public RedundancyFilter() {
 		try {
-			builder = DocumentBuilderFactory.newInstance().newDocumentBuilder();
-		} catch (ParserConfigurationException e) {
-			logger.error("Fail to create document builder!");
-		}
-		try {
 			transformer = TransformerFactory.newInstance().newTransformer();
+			transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION,
+					"yes");
 		} catch (TransformerConfigurationException e) {
-			logger.error("Fail to create transformer");
+			logger.error("Fail to create transformer.");
 		} catch (TransformerFactoryConfigurationError e) {
-			logger.error("Fail to create transformer");
+			logger.error("Fail to create transformer.");
 		}
 	}
 
@@ -99,8 +96,7 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 		consume();
 	}
 
-	/** 处于性能考虑，两者都只有一份，通过synchronized来解决线程安全问题 **/
-	private DocumentBuilder builder;
+	/** 出于性能考虑，只有一份，通过synchronized来解决线程安全问题 **/
 	private Transformer transformer;
 
 	public void consume() throws Exception {
@@ -118,6 +114,12 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 					sleep++;
 				continue;
 			}
+			if (weibos.size() > MAX_VOLUMN) {
+				logger.error("Sth. may be wrong with WeiboSaver as so many weibos in RedundancyFilter.");
+				Thread.sleep(sleep * 1000);
+				if (sleep <= 60)
+					sleep++;
+			}
 			sleep = 1;
 			Runnable r = new FilterThread(jsonObj);
 			Manager.exec.execute(r);
@@ -132,6 +134,8 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 		}
 	}
 
+	public final int MAX_VOLUMN = 1024 * 15;
+
 	/**
 	 * 用于跑过滤的线程,一个线程处理一个JSONObject
 	 */
@@ -142,34 +146,72 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 			this.jsonObj = jsonObj;
 		}
 
-		private boolean DBcontains(String weibo) {
-			return dao.containsWeibo(weibo);
+		long hash = 0;
+
+		private boolean DBcontains(String raw, String content) {
+			logger.debug("Caculating hash code of {}.", raw);
+			// 模拟hashcode，不同的是返回long型
+			// hash能保证的是相同的hash相同，但无法保证不同的不同
+			long seed = 31;
+			hash = 0;
+			for (int i = 0; i < raw.length(); i++) {
+				hash = (hash * seed) + raw.charAt(i);
+			}
+			//最多查询10次数据库，假如还是没找到就放弃该条微博，认为已经存在于数据库
+			WebPage webPage;
+			for (int i = 0; i < 10; i++) {
+				webPage = dao.getWebPageByUrl(String.valueOf(hash));
+				if (webPage == null)
+					return false;
+				else {
+					if(webPage.getContent().equals(content))
+						break;
+					hash++;
+				}
+			}
+			return true;
 		}
 
-		int count = 0;
+		int count = 0;// 计数，记录到底有几个被视为重复
 		boolean flag = false;
+
 		public void run() {
 			/***** 将string转换成dom ******/
 			String data = jsonObj.getString("data");
 			jsonObj.remove("data");
-			data = "<root>" + data + "</root>";
+			// data = "<html>" + data + "</html>";
+			HtmlCleaner cleaner = new HtmlCleaner();
+			cleaner.getProperties().setNamespacesAware(false);
 			Document doc = null;
-			synchronized (builder) {
-				try {
-					doc = builder.parse(new ByteArrayInputStream(data
-							.getBytes()));
-				} catch (SAXException e) {
-					logger.error("Fail to parser data in JSON.");
-				} catch (IOException e) {
-					logger.error("Fail to parser data in JSON.");
-				}
+			try {
+				doc = new DomSerializer(cleaner.getProperties(), true)
+						.createDOM(cleaner.clean(data));
+			} catch (ParserConfigurationException e1) {
+				logger.error("Error in cleaner configuration.");
 			}
+			// Document doc = null;
+			// synchronized (builder) {
+			// try {
+			// doc = builder.parse(new ByteArrayInputStream(data
+			// .getBytes()));
+			// } catch (SAXException e) {
+			// e.printStackTrace();
+			// logger.error("Fail to parser data in JSON.");
+			// return;
+			// } catch (IOException e) {
+			// logger.error("Fail to parser data in JSON.");
+			// return;
+			// }
+			// }
 			if (doc == null)
 				return;
 			/****** 再将dom所有的子节点转换成String *******/
-			NodeList nodeList = doc.getChildNodes();
-			for (int i = 0; i < nodeList.getLength(); i++) {
+			NodeList nodeList = doc.getElementsByTagName("body").item(0)
+					.getChildNodes();
+			for (int i = 0, j = 0; i < nodeList.getLength(); i++) {
 				Node n = nodeList.item(i);
+				if (n.getNodeType() != Node.ELEMENT_NODE)
+					continue;
 				DOMSource source = new DOMSource(n);
 				StringWriter writer = new StringWriter();
 				Result result = new StreamResult(writer);
@@ -179,13 +221,18 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 						transformer.transform(source, result);
 					} catch (TransformerException e) {
 						logger.error("Fail to transform node to string.");
+						return;
 					}
 				}
 
 				/***** 通过对比数据库里面的String来判断冗余 ****/
 				String content = writer.getBuffer().toString();
-				if (!DBcontains(content)) {
-					jsonObj.accumulate("content-" + i, content);
+				String raw = n.getTextContent().trim();
+
+				if (!DBcontains(raw, content)) {
+					jsonObj.accumulate("content-" + j, content);
+					jsonObj.accumulate("uri", String.valueOf(hash));
+					j++;
 					count = 0;
 					flag = true;
 				} else {

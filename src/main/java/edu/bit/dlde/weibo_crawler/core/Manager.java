@@ -1,15 +1,21 @@
 package edu.bit.dlde.weibo_crawler.core;
 
+import java.net.UnknownHostException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
+
+import com.google.code.morphia.Datastore;
+import com.google.code.morphia.Morphia;
+import com.mongodb.Mongo;
+import com.mongodb.MongoException;
 
 import bit.mirror.dao.mongo.MongoDao;
 
 import edu.bit.dlde.weibo_crawler.process.RedundancyFilter;
 import edu.bit.dlde.weibo_crawler.process.SeedProvider;
-import edu.bit.dlde.weibo_crawler.process.WeiboFetcher;
-import edu.bit.dlde.weibo_crawler.process.WeiboLogin;
-import edu.bit.dlde.weibo_crawler.process.WeiboSaver;
+import edu.bit.dlde.weibo_crawler.process.Fetcher;
+import edu.bit.dlde.weibo_crawler.process.Login;
+import edu.bit.dlde.weibo_crawler.process.Saver;
 
 /**
  * 管理所有的processor的一个类
@@ -21,28 +27,44 @@ public class Manager {
 	/*** 提供seed ***/
 	public SeedProvider seedProvider;
 	/*** 根据帐号获得登录cookie ***/
-	public WeiboLogin weiboLogin;
+	public Login weiboLogin;
 	/*** 爬取微博 ***/
-	public WeiboFetcher weiboFetcher;
+	public Fetcher weiboFetcher;
 	/*** 去重 ***/
 	public RedundancyFilter redundancyFilter;
 	/*** 入库 ***/
-	public WeiboSaver weiboSaver;
-
+	public Saver weiboSaver;
+	/*** 各种标志位 ***/
 	private boolean loadWithoutExceptions = false;
 	private boolean pauseWithoutExceptions = false;
 	private boolean stopWithoutExceptions = false;
 	private boolean goonWithoutExceptions = false;
-
+	/*** dao ***/
 	MongoDao dao;
-
+	/*** 整个crawler的线程池 ***/
 	public static ThreadPoolExecutor exec = (ThreadPoolExecutor) Executors
 			.newCachedThreadPool();
+	static {
+		exec.setCorePoolSize(50);
+		exec.setMaximumPoolSize(80);
+	}
 
 	public boolean init() {
 		// dao.setMongo(mongo);
 		if (dao == null) {
+			Mongo mongo = null;
+			try {
+				mongo = new Mongo("10.1.0.171", 27017);
+			} catch (UnknownHostException e) {
+				e.printStackTrace();
+			} catch (MongoException e) {
+				e.printStackTrace();
+			}
+			Morphia morphia = new Morphia();
+			Datastore datastore = morphia.createDatastore(mongo, "genius");
 			dao = new MongoDao();
+			dao.setMongo(mongo);
+			dao.setDatastore(datastore);
 			dao.start();
 		}
 		loadWithoutExceptions = true;
@@ -51,11 +73,11 @@ public class Manager {
 		seedProvider.setDao(dao);
 		seedProvider.setManager(this);
 
-		weiboLogin = new WeiboLogin();
+		weiboLogin = new Login();
 		weiboLogin.setManager(this);
 		weiboLogin.setProducer(seedProvider);
 
-		weiboFetcher = new WeiboFetcher();
+		weiboFetcher = new Fetcher();
 		weiboFetcher.setManager(this);
 		weiboFetcher.setProducer(weiboLogin);
 
@@ -64,7 +86,7 @@ public class Manager {
 		redundancyFilter.setDao(dao);
 		redundancyFilter.setProducer(weiboFetcher);
 
-		weiboSaver = new WeiboSaver();
+		weiboSaver = new Saver();
 		weiboSaver.setDao(dao);
 		weiboSaver.setManager(this);
 		weiboSaver.setProducer(redundancyFilter);
@@ -74,7 +96,7 @@ public class Manager {
 		exec.execute(weiboFetcher);
 		exec.execute(redundancyFilter);
 		exec.execute(weiboSaver);
-		
+
 		return loadWithoutExceptions;
 	}
 
@@ -99,6 +121,10 @@ public class Manager {
 
 	public void fireFetcherReset() {
 
+	}
+
+	public void fireSeedReloadEvent() {
+		
 	}
 
 	public boolean isLoadWithoutExceptions() {

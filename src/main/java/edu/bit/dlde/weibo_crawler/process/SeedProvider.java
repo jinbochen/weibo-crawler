@@ -77,8 +77,12 @@ public class SeedProvider implements Producer<Seed>, Runnable {
 		Iterator<Seed> it = dao.getSeeds().iterator();
 		while (it.hasNext()) {
 			Seed s = it.next();
-			if (s.getType().equals("WEIBO"))
-				seeds.add(it.next());
+			if (s.getType().equals("WEIBO")) {
+				seeds.add(s);
+				logger.info(
+						"Seed provider found seed whose account is '{}' and password is '{}'",
+						s.getAccount(), s.getPassword());
+			}
 		}
 	}
 
