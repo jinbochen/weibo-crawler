@@ -148,12 +148,14 @@ public class Saver implements Processor<Long, JSONObject> {
 				webPage.setContent(content);
 				webPage.setFetchDate(new Date());
 				try {
-					webPage.setUrl(new URI(jsonObj.getString("uri")));
+					webPage.setUrl(new URI(jsonObj.getString("uri-" + i)));
 					/*** 将WebPage存入数据库 ***/
 					dao.saveWebPage(webPage);
 					count = count + 1;
 				} catch (URISyntaxException e) {
-					logger.error("Error in uri syntax.");
+					logger.error("Error in uri syntax: {}.",
+							jsonObj.getString("uri-" + i));
+					e.printStackTrace();
 				}
 			}
 		}

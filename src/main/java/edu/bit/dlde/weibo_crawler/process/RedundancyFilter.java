@@ -157,14 +157,15 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 			for (int i = 0; i < raw.length(); i++) {
 				hash = (hash * seed) + raw.charAt(i);
 			}
-			//最多查询20次数据库，假如还是没找到就放弃该条微博，认为已经存在于数据库
+			// 最多查询20次数据库，假如还是没找到就放弃该条微博，认为已经存在于数据库
 			WebPage webPage;
 			for (int i = 0; i < 20; i++) {
-				webPage = dao.getWebPageByUrl(String.valueOf(hash));
+				webPage = dao
+						.getWebPageByUrl("file:///" + String.valueOf(hash));
 				if (webPage == null)
 					return false;
 				else {
-					if(webPage.getContent().equals(content))
+					if (webPage.getContent().equals(content))
 						break;
 					hash++;
 				}
@@ -232,7 +233,8 @@ public class RedundancyFilter implements Processor<JSONObject, JSONObject> {
 				if (!DBcontains(raw, content)) {
 					jsonObj.accumulate("content-" + j, content);
 					/*** 由于uri是被索引的域所以计划使用hascode来代替，从而提升查重的速率 ***/
-					jsonObj.accumulate("uri", String.valueOf(hash));
+					jsonObj.accumulate("uri-" + j,
+							"file://localhost/" + String.valueOf(hash));
 					j++;
 					count = 0;
 					flag = true;

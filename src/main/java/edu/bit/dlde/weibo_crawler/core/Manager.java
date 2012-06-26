@@ -92,9 +92,25 @@ public class Manager {
 		weiboSaver.setProducer(redundancyFilter);
 
 		exec.execute(seedProvider);
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		}
 		exec.execute(weiboLogin);
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		}
 		exec.execute(weiboFetcher);
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		}
 		exec.execute(redundancyFilter);
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		}
 		exec.execute(weiboSaver);
 
 		return loadWithoutExceptions;
